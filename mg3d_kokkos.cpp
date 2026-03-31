@@ -11,7 +11,8 @@
 // Manufactured test: u=sin(pi x) sin(pi y) sin(pi z), f=3 pi^2 u.
 //
 // Build:
-//   g++ -O3 -std=c++17 -I<kokkos_include> -L<kokkos_lib> mg3d_kokkos.cpp -lkokkoscore -o mg3d_kokkos
+//   g++ -O3 -std=c++17 -I<kokkos_include> -L<kokkos_lib> mg3d_kokkos.cpp -lkokkoscore -o
+//   mg3d_kokkos
 // Run:
 //   ./mg3d_kokkos -nx 65 -ny 97 -nz 129 -nu1 2 -nu2 2 -w 0.8 -tol 1e-8 -maxit 200
 // -----------------------------------------------------------------------------
@@ -47,6 +48,8 @@
  */
 
 #include <Kokkos_Core.hpp>
+
+#include <IpplCore.h>
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -62,8 +65,9 @@ using DeviceView = Kokkos::View<double*>;
  *  \param nx leading dimension (x), \param ny size in y
  *  \return linear index \f$\mathrm{id} = i + n_x\,(j + n_y\,k)\f$.
  */
-KOKKOS_INLINE_FUNCTION
-int id3(int i, int j, int k, int nx, int ny) { return i + nx * (j + ny * k); }
+KOKKOS_INLINE_FUNCTION int id3(int i, int j, int k, int nx, int ny) {
+    return i + nx * (j + ny * k);
+}
 
 /** \brief Geometry-only description of one multigrid level.
  *  \details Level \f$\ell\f$ stores only sizes and spacings
@@ -71,7 +75,7 @@ int id3(int i, int j, int k, int nx, int ny) { return i + nx * (j + ny * k); }
  *  \f$(h_x^{(\ell)},h_y^{(\ell)},h_z^{(\ell)})\f$.
  */
 struct Level3D {
-    int    nx = 0, ny = 0, nz = 0;  //!< grid points per dimension (including boundaries)
+    int nx = 0, ny = 0, nz = 0;     //!< grid points per dimension (including boundaries)
     double hx = 1, hy = 1, hz = 1;  //!< spacing per dimension
 };
 
@@ -87,9 +91,9 @@ struct Level3D {
  *  \c nu1 / \c nu2 are pre/post smoothing steps; \c omega is the Jacobi weight.
  */
 struct MultiGrid3D {
-    std::vector<Level3D> L;                 //!< L[0] finest
-    int                  nu1 = 2, nu2 = 2;  //!< pre/post smoothing steps
-    double               omega = 0.8;       //!< weighted-Jacobi parameter
+    std::vector<Level3D> L;  //!< L[0] finest
+    int nu1 = 2, nu2 = 2;    //!< pre/post smoothing steps
+    double omega = 0.8;      //!< weighted-Jacobi parameter
 
     // Workspace per level (matrix-free; no A stored)
     std::vector<DeviceView> uL;  //!< level-wise correction buffers
@@ -106,7 +110,9 @@ struct MultiGrid3D {
      *  \param omega_ Jacobi weight \f$\omega\f$
      */
     MultiGrid3D(int nx_f, int ny_f, int nz_f, int nu1_ = 2, int nu2_ = 2, double omega_ = 0.8)
-        : nu1(nu1_), nu2(nu2_), omega(omega_) {
+        : nu1(nu1_)
+        , nu2(nu2_)
+        , omega(omega_) {
         build_hierarchy(nx_f, ny_f, nz_f);
         allocate_workspace();
     }
@@ -129,11 +135,14 @@ struct MultiGrid3D {
             lev.hy = 1.0 / (ny - 1);
             lev.hz = 1.0 / (nz - 1);
             L.push_back(lev);
-            if (nx <= 3 || ny <= 3 || nz <= 3) break;
-            auto half = [](int n) { return (n - 1) / 2 + 1; };
-            nx        = std::max(3, half(nx));
-            ny        = std::max(3, half(ny));
-            nz        = std::max(3, half(nz));
+            if (nx <= 3 || ny <= 3 || nz <= 3)
+                break;
+            auto half = [](int n) {
+                return (n - 1) / 2 + 1;
+            };
+            nx = std::max(3, half(nx));
+            ny = std::max(3, half(ny));
+            nz = std::max(3, half(nz));
         }
     }
 
@@ -160,7 +169,7 @@ struct MultiGrid3D {
      *  \note Dirichlet boundaries are fixed; updates are applied only to interior nodes.
      */
     static void apply_A(const Level3D& lev, const DeviceView& u, const DeviceView& out) {
-        const int    nx = lev.nx, ny = lev.ny, nz = lev.nz;
+        const int nx = lev.nx, ny = lev.ny, nz = lev.nz;
         const double ihx2 = 1.0 / (lev.hx * lev.hx);
         const double ihy2 = 1.0 / (lev.hy * lev.hy);
         const double ihz2 = 1.0 / (lev.hz * lev.hz);
@@ -170,10 +179,10 @@ struct MultiGrid3D {
             "apply_A", Kokkos::MDRangePolicy<Kokkos::Rank<3>>({1, 1, 1}, {nx - 1, ny - 1, nz - 1}),
             KOKKOS_LAMBDA(int i, int j, int k) {
                 const int id = id3(i, j, k, nx, ny);
-                out(id)      = diag * u(id) -
-                          ihx2 * (u(id3(i - 1, j, k, nx, ny)) + u(id3(i + 1, j, k, nx, ny))) -
-                          ihy2 * (u(id3(i, j - 1, k, nx, ny)) + u(id3(i, j + 1, k, nx, ny))) -
-                          ihz2 * (u(id3(i, j, k - 1, nx, ny)) + u(id3(i, j, k + 1, nx, ny)));
+                out(id)      = diag * u(id)
+                          - ihx2 * (u(id3(i - 1, j, k, nx, ny)) + u(id3(i + 1, j, k, nx, ny)))
+                          - ihy2 * (u(id3(i, j - 1, k, nx, ny)) + u(id3(i, j + 1, k, nx, ny)))
+                          - ihz2 * (u(id3(i, j, k - 1, nx, ny)) + u(id3(i, j, k + 1, nx, ny)));
             });
     }
 
@@ -205,7 +214,7 @@ struct MultiGrid3D {
     static void smooth_jacobi(const Level3D& lev, DeviceView& u, const DeviceView& f,
                               DeviceView& r_scratch, DeviceView& Au_scratch, int iters,
                               double omega) {
-        const int    nx = lev.nx, ny = lev.ny, nz = lev.nz;
+        const int nx = lev.nx, ny = lev.ny, nz = lev.nz;
         const double ihx2 = 1.0 / (lev.hx * lev.hx);
         const double ihy2 = 1.0 / (lev.hy * lev.hy);
         const double ihz2 = 1.0 / (lev.hz * lev.hz);
@@ -227,7 +236,8 @@ struct MultiGrid3D {
      *  \param r_f fine residual
      *  \param coarse coarse level geometry
      *  \param f_c output coarse RHS
-     *  \details Weights relative to center (2I,2J,2K): center 8; faces 4; edges 2; corners 1; then divide by 64.
+     *  \details Weights relative to center (2I,2J,2K): center 8; faces 4; edges 2; corners 1; then
+     * divide by 64.
      */
     static void restrict_fullweight(const Level3D& fine, const DeviceView& r_f,
                                     const Level3D& coarse, DeviceView& f_c) {
@@ -239,7 +249,7 @@ struct MultiGrid3D {
             Kokkos::MDRangePolicy<Kokkos::Rank<3>>({1, 1, 1}, {nxc - 1, nyc - 1, nzc - 1}),
             KOKKOS_LAMBDA(int I, int J, int K) {
                 const int i = 2 * I, j = 2 * J, k = 2 * K;
-                double    sum = 0.0;
+                double sum = 0.0;
                 for (int dk = -1; dk <= 1; ++dk)
                     for (int dj = -1; dj <= 1; ++dj)
                         for (int di = -1; di <= 1; ++di) {
@@ -298,12 +308,13 @@ struct MultiGrid3D {
     }
 
     /** \brief One matrix-free V-cycle on level \f$\ell\f$ using workspace vectors.
-     *  \details Steps: \f$\nu_1\f$ pre-smooth → residual → restrict → coarse solve → prolongate → \f$\nu_2\f$ post-smooth.
+     *  \details Steps: \f$\nu_1\f$ pre-smooth → residual → restrict → coarse solve → prolongate →
+     * \f$\nu_2\f$ post-smooth.
      */
     void vcycle(int ell) {
         Level3D& lev = L[ell];
-        auto &   u = uL[ell], &f = fL[ell], &r = rL[ell], &t = tL[ell];
-        if (ell == (int) L.size() - 1) {
+        auto &u = uL[ell], &f = fL[ell], &r = rL[ell], &t = tL[ell];
+        if (ell == (int)L.size() - 1) {
             smooth_jacobi(lev, u, f, r, t, 50, omega);  // coarsest pseudo-solve
             return;
         }
@@ -322,13 +333,15 @@ struct MultiGrid3D {
      */
     void apply_precond(const DeviceView& r_finest, DeviceView& z_finest) {
         Kokkos::deep_copy(fL[0], r_finest);
-        for (size_t ell = 0; ell < L.size(); ++ell) Kokkos::deep_copy(uL[ell], 0.0);
+        for (size_t ell = 0; ell < L.size(); ++ell)
+            Kokkos::deep_copy(uL[ell], 0.0);
         vcycle(0);
         Kokkos::deep_copy(z_finest, uL[0]);
     }
 };
 
-/** \brief Preconditioned Conjugate Gradient (PCG) for SPD systems using MG V-cycles as right preconditioner.
+/** \brief Preconditioned Conjugate Gradient (PCG) for SPD systems using MG V-cycles as right
+ * preconditioner.
  *  \details Algorithm (Saad, Ch. 9):
  *  \f[
  *   r_0=f-Au_0,\ z_0=M^{-1}r_0,\ p_0=z_0,\
@@ -341,12 +354,12 @@ struct MultiGrid3D {
  *  \f]
  */
 struct PCG {
-    int    maxit = 200;
-    double tol   = 1e-8;
+    int maxit  = 200;
+    double tol = 1e-8;
 
     /** \brief Euclidean dot product \f$(a,b)\f$. */
     static inline double dot(const DeviceView& a, const DeviceView& b) {
-        double    s = 0;
+        double s    = 0;
         const int N = a.extent(0);
         Kokkos::parallel_reduce(
             "dot", N, KOKKOS_LAMBDA(int i, double& lsum) { lsum += a(i) * b(i); }, s);
@@ -370,14 +383,15 @@ struct PCG {
      */
     int solve(const Level3D& levA, DeviceView& u, const DeviceView& f, MultiGrid3D& mg,
               double& final_relres) {
-        const int  N = (int) u.extent(0);
+        const int N = (int)u.extent(0);
         DeviceView r("r", N), z("z", N), p("p", N), Ap("Ap", N);
 
         MultiGrid3D::apply_A(levA, u, Ap);
         Kokkos::parallel_for("init_r", N, KOKKOS_LAMBDA(int i) { r(i) = f(i) - Ap(i); });
 
         double normf = nrm2(f);
-        if (normf == 0.0) normf = 1.0;
+        if (normf == 0.0)
+            normf = 1.0;
         double rel = nrm2(r) / normf;
         if (rel < tol) {
             final_relres = rel;
@@ -411,19 +425,20 @@ struct PCG {
     }
 };
 
-/** \brief Manufactured 3D test: \f$u=\sin(\pi x)\sin(\pi y)\sin(\pi z)\f$, \f$f=3\pi^2 u\f$ (Dirichlet consistent). */
+/** \brief Manufactured 3D test: \f$u=\sin(\pi x)\sin(\pi y)\sin(\pi z)\f$, \f$f=3\pi^2 u\f$
+ * (Dirichlet consistent). */
 void fill_manufactured(const Level3D& lev, DeviceView& f, DeviceView& u_exact) {
     const double pi = 3.14159265358979323846;
-    const int    nx = lev.nx, ny = lev.ny, nz = lev.nz;
+    const int nx = lev.nx, ny = lev.ny, nz = lev.nz;
     const double hx = lev.hx, hy = lev.hy, hz = lev.hz;
 
     Kokkos::parallel_for(
         "fill_manufactured", Kokkos::MDRangePolicy<Kokkos::Rank<3>>({0, 0, 0}, {nx, ny, nz}),
         KOKKOS_LAMBDA(int i, int j, int k) {
-            double    x = i * hx, y = j * hy, z = k * hz;
-            const int id  = id3(i, j, k, nx, ny);
-            double    uex = Kokkos::sin(pi * x) * Kokkos::sin(pi * y) * Kokkos::sin(pi * z);
-            u_exact(id)   = uex;
+            double x = i * hx, y = j * hy, z = k * hz;
+            const int id = id3(i, j, k, nx, ny);
+            double uex   = Kokkos::sin(pi * x) * Kokkos::sin(pi * y) * Kokkos::sin(pi * z);
+            u_exact(id)  = uex;
             // enforce zero RHS on Dirichlet boundary nodes
             if (i == 0 || i == nx - 1 || j == 0 || j == ny - 1 || k == 0 || k == nz - 1)
                 f(id) = 0.0;
@@ -434,11 +449,11 @@ void fill_manufactured(const Level3D& lev, DeviceView& f, DeviceView& u_exact) {
 
 /** \brief Command-line arguments. */
 struct Args {
-    int    nx = 65, ny = 65, nz = 65;
-    int    nu1 = 2, nu2 = 2;
-    double w     = 0.8;
-    double tol   = 1e-8;
-    int    maxit = 200;
+    int nx = 65, ny = 65, nz = 65;
+    int nu1 = 2, nu2 = 2;
+    double w   = 0.8;
+    double tol = 1e-8;
+    int maxit  = 200;
 };
 
 /** \brief Parse command line: -nx -ny -nz -nu1 -nu2 -w -tol -maxit. */
@@ -485,9 +500,9 @@ int main(int argc, char** argv) {
         MultiGrid3D mg(args.nx, args.ny, args.nz, args.nu1, args.nu2, args.w);
 
         const Level3D& Alev = mg.L[0];
-        const int      N    = Alev.nx * Alev.ny * Alev.nz;
-        DeviceView     u("u", N);
-        DeviceView     f("f", N), uex("uex", N);
+        const int N         = Alev.nx * Alev.ny * Alev.nz;
+        DeviceView u("u", N);
+        DeviceView f("f", N), uex("uex", N);
         fill_manufactured(Alev, f, uex);
 
         std::cout << "3D Matrix-Free MG-preconditioned CG for -Δu=f on [0,1]^3\n";
@@ -498,21 +513,21 @@ int main(int argc, char** argv) {
                   << ", nu2=" << args.nu2 << ")\n";
 
         PCG pcg;
-        pcg.maxit         = args.maxit;
-        pcg.tol           = args.tol;
-        double        rel = 1.0;
+        pcg.maxit  = args.maxit;
+        pcg.tol    = args.tol;
+        double rel = 1.0;
         Kokkos::Timer timer;
-        int           it  = pcg.solve(Alev, u, f, mg, rel);
-        double        sec = timer.seconds();
+        int it     = pcg.solve(Alev, u, f, mg, rel);
+        double sec = timer.seconds();
 
         // Relative L2 error vs exact (interior only)
-        double    e2 = 0.0, u2 = 0.0;
+        double e2 = 0.0, u2 = 0.0;
         const int nx = Alev.nx, ny = Alev.ny, nz = Alev.nz;
         Kokkos::parallel_reduce(
             "L2_error", Kokkos::MDRangePolicy<Kokkos::Rank<3>>({1, 1, 1}, {nx - 1, ny - 1, nz - 1}),
             KOKKOS_LAMBDA(int i, int j, int k, double& le2, double& lu2) {
-                int    id = id3(i, j, k, nx, ny);
-                double e  = u(id) - uex(id);
+                int id   = id3(i, j, k, nx, ny);
+                double e = u(id) - uex(id);
                 le2 += e * e;
                 lu2 += uex(id) * uex(id);
             },

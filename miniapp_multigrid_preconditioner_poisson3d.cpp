@@ -60,7 +60,9 @@
  *  \param nx leading dimension (x), \param ny size in y
  *  \return linear index \f$\mathrm{id} = i + n_x\,(j + n_y\,k)\f$.
  */
-static inline int id3(int i, int j, int k, int nx, int ny) { return i + nx * (j + ny * k); }
+static inline int id3(int i, int j, int k, int nx, int ny) {
+    return i + nx * (j + ny * k);
+}
 
 /** \brief Geometry-only description of one multigrid level.
  *  \details Level \f$\ell\f$ stores only sizes and spacings
@@ -68,7 +70,7 @@ static inline int id3(int i, int j, int k, int nx, int ny) { return i + nx * (j 
  *  \f$(h_x^{(\ell)},h_y^{(\ell)},h_z^{(\ell)})\f$.
  */
 struct Level3D {
-    int    nx = 0, ny = 0, nz = 0;  //!< grid points per dimension (including boundaries)
+    int nx = 0, ny = 0, nz = 0;     //!< grid points per dimension (including boundaries)
     double hx = 1, hy = 1, hz = 1;  //!< spacing per dimension
 };
 
@@ -84,9 +86,9 @@ struct Level3D {
  *  \c nu1 / \c nu2 are pre/post smoothing steps; \c omega is the Jacobi weight.
  */
 struct MultiGrid3D {
-    std::vector<Level3D> L;                 //!< L[0] finest
-    int                  nu1 = 2, nu2 = 2;  //!< pre/post smoothing steps
-    double               omega = 0.8;       //!< weighted-Jacobi parameter
+    std::vector<Level3D> L;  //!< L[0] finest
+    int nu1 = 2, nu2 = 2;    //!< pre/post smoothing steps
+    double omega = 0.8;      //!< weighted-Jacobi parameter
 
     // Workspace per level (matrix-free; no A stored)
     std::vector<std::vector<double> > uL;  //!< level-wise correction buffers
@@ -103,7 +105,9 @@ struct MultiGrid3D {
      *  \param omega_ Jacobi weight \f$\omega\f$
      */
     MultiGrid3D(int nx_f, int ny_f, int nz_f, int nu1_ = 2, int nu2_ = 2, double omega_ = 0.8)
-        : nu1(nu1_), nu2(nu2_), omega(omega_) {
+        : nu1(nu1_)
+        , nu2(nu2_)
+        , omega(omega_) {
         build_hierarchy(nx_f, ny_f, nz_f);
         allocate_workspace();
     }
@@ -126,11 +130,14 @@ struct MultiGrid3D {
             lev.hy = 1.0 / (ny - 1);
             lev.hz = 1.0 / (nz - 1);
             L.push_back(lev);
-            if (nx <= 3 || ny <= 3 || nz <= 3) break;
-            auto half = [](int n) { return (n - 1) / 2 + 1; };
-            nx        = std::max(3, half(nx));
-            ny        = std::max(3, half(ny));
-            nz        = std::max(3, half(nz));
+            if (nx <= 3 || ny <= 3 || nz <= 3)
+                break;
+            auto half = [](int n) {
+                return (n - 1) / 2 + 1;
+            };
+            nx = std::max(3, half(nx));
+            ny = std::max(3, half(ny));
+            nz = std::max(3, half(nz));
         }
     }
 
@@ -158,7 +165,7 @@ struct MultiGrid3D {
      */
     static void apply_A(const Level3D& lev, const std::vector<double>& u,
                         std::vector<double>& out) {
-        const int    nx = lev.nx, ny = lev.ny, nz = lev.nz;
+        const int nx = lev.nx, ny = lev.ny, nz = lev.nz;
         const double ihx2 = 1.0 / (lev.hx * lev.hx);
         const double ihy2 = 1.0 / (lev.hy * lev.hy);
         const double ihz2 = 1.0 / (lev.hz * lev.hz);
@@ -168,10 +175,10 @@ struct MultiGrid3D {
             for (int j = 1; j < ny - 1; ++j)
                 for (int i = 1; i < nx - 1; ++i) {
                     const int id = id3(i, j, k, nx, ny);
-                    out[id]      = diag * u[id] -
-                              ihx2 * (u[id3(i - 1, j, k, nx, ny)] + u[id3(i + 1, j, k, nx, ny)]) -
-                              ihy2 * (u[id3(i, j - 1, k, nx, ny)] + u[id3(i, j + 1, k, nx, ny)]) -
-                              ihz2 * (u[id3(i, j, k - 1, nx, ny)] + u[id3(i, j, k + 1, nx, ny)]);
+                    out[id]      = diag * u[id]
+                              - ihx2 * (u[id3(i - 1, j, k, nx, ny)] + u[id3(i + 1, j, k, nx, ny)])
+                              - ihy2 * (u[id3(i, j - 1, k, nx, ny)] + u[id3(i, j + 1, k, nx, ny)])
+                              - ihz2 * (u[id3(i, j, k - 1, nx, ny)] + u[id3(i, j, k + 1, nx, ny)]);
                 }
     }
 
@@ -187,7 +194,8 @@ struct MultiGrid3D {
                          std::vector<double>& Au_scratch) {
         apply_A(lev, u, Au_scratch);
         const int N = lev.nx * lev.ny * lev.nz;
-        for (int id = 0; id < N; ++id) r[id] = f[id] - Au_scratch[id];
+        for (int id = 0; id < N; ++id)
+            r[id] = f[id] - Au_scratch[id];
     }
 
     /** \brief Weighted-Jacobi smoother: \f$u \leftarrow u + \omega D^{-1}(f-Au)\f$.
@@ -203,7 +211,7 @@ struct MultiGrid3D {
     static void smooth_jacobi(const Level3D& lev, std::vector<double>& u,
                               const std::vector<double>& f, std::vector<double>& r_scratch,
                               std::vector<double>& Au_scratch, int iters, double omega) {
-        const int    nx = lev.nx, ny = lev.ny, nz = lev.nz;
+        const int nx = lev.nx, ny = lev.ny, nz = lev.nz;
         const double ihx2 = 1.0 / (lev.hx * lev.hx);
         const double ihy2 = 1.0 / (lev.hy * lev.hy);
         const double ihz2 = 1.0 / (lev.hz * lev.hz);
@@ -224,7 +232,8 @@ struct MultiGrid3D {
      *  \param r_f fine residual
      *  \param coarse coarse level geometry
      *  \param f_c output coarse RHS
-     *  \details Weights relative to center (2I,2J,2K): center 8; faces 4; edges 2; corners 1; then divide by 64.
+     *  \details Weights relative to center (2I,2J,2K): center 8; faces 4; edges 2; corners 1; then
+     * divide by 64.
      */
     static void restrict_fullweight(const Level3D& fine, const std::vector<double>& r_f,
                                     const Level3D& coarse, std::vector<double>& f_c) {
@@ -235,14 +244,14 @@ struct MultiGrid3D {
             for (int J = 1; J < nyc - 1; ++J)
                 for (int I = 1; I < nxc - 1; ++I) {
                     const int i = 2 * I, j = 2 * J, k = 2 * K;
-                    double    sum = 0.0;
+                    double sum = 0.0;
                     for (int dk = -1; dk <= 1; ++dk)
                         for (int dj = -1; dj <= 1; ++dj)
                             for (int di = -1; di <= 1; ++di) {
-                                int    wclass = std::abs(di) + std::abs(dj) + std::abs(dk);
-                                double w      = (wclass == 0)
-                                                    ? 8.0
-                                                    : (wclass == 1 ? 4.0 : (wclass == 2 ? 2.0 : 1.0));
+                                int wclass = std::abs(di) + std::abs(dj) + std::abs(dk);
+                                double w   = (wclass == 0)
+                                                 ? 8.0
+                                                 : (wclass == 1 ? 4.0 : (wclass == 2 ? 2.0 : 1.0));
                                 sum += w * r_f[id3(i + di, j + dj, k + dk, nxf, nyf)];
                             }
                     f_c[id3(I, J, K, nxc, nyc)] = sum / 64.0;
@@ -289,12 +298,13 @@ struct MultiGrid3D {
     }
 
     /** \brief One matrix-free V-cycle on level \f$\ell\f$ using workspace vectors.
-     *  \details Steps: \f$\nu_1\f$ pre-smooth → residual → restrict → coarse solve → prolongate → \f$\nu_2\f$ post-smooth.
+     *  \details Steps: \f$\nu_1\f$ pre-smooth → residual → restrict → coarse solve → prolongate →
+     * \f$\nu_2\f$ post-smooth.
      */
     void vcycle(int ell) {
         Level3D& lev = L[ell];
-        auto &   u = uL[ell], &f = fL[ell], &r = rL[ell], &t = tL[ell];
-        if (ell == (int) L.size() - 1) {
+        auto &u = uL[ell], &f = fL[ell], &r = rL[ell], &t = tL[ell];
+        if (ell == (int)L.size() - 1) {
             smooth_jacobi(lev, u, f, r, t, 50, omega);  // coarsest pseudo-solve
             return;
         }
@@ -313,13 +323,15 @@ struct MultiGrid3D {
      */
     void apply_precond(const std::vector<double>& r_finest, std::vector<double>& z_finest) {
         fL[0] = r_finest;
-        for (size_t ell = 0; ell < L.size(); ++ell) std::fill(uL[ell].begin(), uL[ell].end(), 0.0);
+        for (size_t ell = 0; ell < L.size(); ++ell)
+            std::fill(uL[ell].begin(), uL[ell].end(), 0.0);
         vcycle(0);
         z_finest = uL[0];
     }
 };
 
-/** \brief Preconditioned Conjugate Gradient (PCG) for SPD systems using MG V-cycles as right preconditioner.
+/** \brief Preconditioned Conjugate Gradient (PCG) for SPD systems using MG V-cycles as right
+ * preconditioner.
  *  \details Algorithm (Saad, Ch. 9):
  *  \f[
  *   r_0=f-Au_0,\ z_0=M^{-1}r_0,\ p_0=z_0,\
@@ -332,23 +344,26 @@ struct MultiGrid3D {
  *  \f]
  */
 struct PCG {
-    int    maxit = 200;
-    double tol   = 1e-8;
+    int maxit  = 200;
+    double tol = 1e-8;
 
     /** \brief Euclidean dot product \f$(a,b)\f$. */
     static inline double dot(const std::vector<double>& a, const std::vector<double>& b) {
         double s = 0;
-        for (size_t i = 0; i < a.size(); ++i) s += a[i] * b[i];
+        for (size_t i = 0; i < a.size(); ++i)
+            s += a[i] * b[i];
         return s;
     }
     /** \brief y ← y + a x. */
     static inline void axpy(std::vector<double>& y, double a, const std::vector<double>& x) {
-        for (size_t i = 0; i < y.size(); ++i) y[i] += a * x[i];
+        for (size_t i = 0; i < y.size(); ++i)
+            y[i] += a * x[i];
     }
     /** \brief 2-norm \f$\|x\|_2\f$. */
     static inline double nrm2(const std::vector<double>& x) {
         double s = 0;
-        for (double v : x) s += v * v;
+        for (double v : x)
+            s += v * v;
         return std::sqrt(s);
     }
 
@@ -362,14 +377,16 @@ struct PCG {
      */
     int solve(const Level3D& levA, std::vector<double>& u, const std::vector<double>& f,
               MultiGrid3D& mg, double& final_relres) {
-        const int           N = (int) u.size();
+        const int N = (int)u.size();
         std::vector<double> r(N, 0.0), z(N, 0.0), p(N, 0.0), Ap(N, 0.0);
 
         MultiGrid3D::apply_A(levA, u, Ap);
-        for (int i = 0; i < N; ++i) r[i] = f[i] - Ap[i];
+        for (int i = 0; i < N; ++i)
+            r[i] = f[i] - Ap[i];
 
         double normf = nrm2(f);
-        if (normf == 0.0) normf = 1.0;
+        if (normf == 0.0)
+            normf = 1.0;
         double rel = nrm2(r) / normf;
         if (rel < tol) {
             final_relres = rel;
@@ -394,7 +411,8 @@ struct PCG {
             mg.apply_precond(r, z);
             double rz_new = dot(r, z);
             double beta   = rz_new / rz_old;
-            for (int i = 0; i < N; ++i) p[i] = z[i] + beta * p[i];
+            for (int i = 0; i < N; ++i)
+                p[i] = z[i] + beta * p[i];
             rz_old = rz_new;
         }
         final_relres = rel;
@@ -402,10 +420,11 @@ struct PCG {
     }
 };
 
-/** \brief Manufactured 3D test: \f$u=\sin(\pi x)\sin(\pi y)\sin(\pi z)\f$, \f$f=3\pi^2 u\f$ (Dirichlet consistent). */
+/** \brief Manufactured 3D test: \f$u=\sin(\pi x)\sin(\pi y)\sin(\pi z)\f$, \f$f=3\pi^2 u\f$
+ * (Dirichlet consistent). */
 void fill_manufactured(const Level3D& lev, std::vector<double>& f, std::vector<double>& u_exact) {
     const double pi = 3.14159265358979323846;
-    const int    nx = lev.nx, ny = lev.ny, nz = lev.nz;
+    const int nx = lev.nx, ny = lev.ny, nz = lev.nz;
     f.assign(nx * ny * nz, 0.0);
     u_exact.assign(nx * ny * nz, 0.0);
     for (int k = 0; k < nz; ++k) {
@@ -413,11 +432,11 @@ void fill_manufactured(const Level3D& lev, std::vector<double>& f, std::vector<d
         for (int j = 0; j < ny; ++j) {
             double y = j * lev.hy;
             for (int i = 0; i < nx; ++i) {
-                double    x   = i * lev.hx;
-                const int id  = id3(i, j, k, nx, ny);
-                double    uex = std::sin(pi * x) * std::sin(pi * y) * std::sin(pi * z);
-                u_exact[id]   = uex;
-                f[id]         = 3.0 * pi * pi * uex;  // -Δ u = (π²+π²+π²) u
+                double x     = i * lev.hx;
+                const int id = id3(i, j, k, nx, ny);
+                double uex   = std::sin(pi * x) * std::sin(pi * y) * std::sin(pi * z);
+                u_exact[id]  = uex;
+                f[id]        = 3.0 * pi * pi * uex;  // -Δ u = (π²+π²+π²) u
             }
         }
     }
@@ -441,11 +460,11 @@ void fill_manufactured(const Level3D& lev, std::vector<double>& f, std::vector<d
 
 /** \brief Command-line arguments. */
 struct Args {
-    int    nx = 65, ny = 65, nz = 65;
-    int    nu1 = 2, nu2 = 2;
-    double w     = 0.8;
-    double tol   = 1e-8;
-    int    maxit = 200;
+    int nx = 65, ny = 65, nz = 65;
+    int nu1 = 2, nu2 = 2;
+    double w   = 0.8;
+    double tol = 1e-8;
+    int maxit  = 200;
 };
 
 /** \brief Parse command line: -nx -ny -nz -nu1 -nu2 -w -tol -maxit. */
@@ -488,7 +507,7 @@ int main(int argc, char** argv) {
     // Build geometry + allocate matrix-free MG workspace
     MultiGrid3D mg(args.nx, args.ny, args.nz, args.nu1, args.nu2, args.w);
 
-    const Level3D&      Alev = mg.L[0];
+    const Level3D& Alev = mg.L[0];
     std::vector<double> u(Alev.nx * Alev.ny * Alev.nz, 0.0);
     std::vector<double> f, uex;
     fill_manufactured(Alev, f, uex);
@@ -503,19 +522,19 @@ int main(int argc, char** argv) {
     pcg.maxit  = args.maxit;
     pcg.tol    = args.tol;
     double rel = 1.0;
-    auto   t0  = std::chrono::high_resolution_clock::now();
-    int    it  = pcg.solve(Alev, u, f, mg, rel);
-    auto   t1  = std::chrono::high_resolution_clock::now();
+    auto t0    = std::chrono::high_resolution_clock::now();
+    int it     = pcg.solve(Alev, u, f, mg, rel);
+    auto t1    = std::chrono::high_resolution_clock::now();
     double sec = std::chrono::duration<double>(t1 - t0).count();
 
     // Relative L2 error vs exact (interior only)
-    double    e2 = 0.0, u2 = 0.0;
+    double e2 = 0.0, u2 = 0.0;
     const int nx = Alev.nx, ny = Alev.ny, nz = Alev.nz;
     for (int k = 1; k < nz - 1; ++k)
         for (int j = 1; j < ny - 1; ++j)
             for (int i = 1; i < nx - 1; ++i) {
-                int    id = id3(i, j, k, nx, ny);
-                double e  = u[id] - uex[id];
+                int id   = id3(i, j, k, nx, ny);
+                double e = u[id] - uex[id];
                 e2 += e * e;
                 u2 += uex[id] * uex[id];
             }
