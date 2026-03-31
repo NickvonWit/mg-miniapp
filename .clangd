@@ -1,0 +1,4 @@
+CompileFlags:
+  Add:
+    - "-isysroot"
+    - "/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk"
