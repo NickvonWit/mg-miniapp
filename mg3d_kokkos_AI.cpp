@@ -49,7 +49,6 @@
 
 #include <Kokkos_Core.hpp>
 
-#include <IpplCore.h>
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -99,7 +98,8 @@ struct Level3D {
 struct MultiGrid3D {
     std::vector<Level3D> L;  //!< L[0] finest
     int nu1 = 2, nu2 = 2;    //!< pre/post smoothing steps
-    double omega = 0.8;      //!< weighted-Jacobi parameter
+    int resolution = 3;      //!< resolution of grainiest grid
+    double omega   = 0.8;    //!< weighted-Jacobi parameter
 
     // Workspace per level (matrix-free; no A stored)
     std::vector<DeviceView> uL;  //!< level-wise correction buffers
@@ -115,8 +115,10 @@ struct MultiGrid3D {
      *  \param nu2_ post-smoothing sweeps
      *  \param omega_ Jacobi weight \f$\omega\f$
      */
-    MultiGrid3D(int nx_f, int ny_f, int nz_f, int nu1_ = 2, int nu2_ = 2, double omega_ = 0.8)
-        : nu1(nu1_)
+    MultiGrid3D(int nx_f, int ny_f, int nz_f, int res_ = 3, int nu1_ = 2, int nu2_ = 2,
+                double omega_ = 0.8)
+        : resolution(res_)
+        , nu1(nu1_)
         , nu2(nu2_)
         , omega(omega_) {
         build_hierarchy(nx_f, ny_f, nz_f);
@@ -141,7 +143,7 @@ struct MultiGrid3D {
             lev.hy = 1.0 / (ny - 1);
             lev.hz = 1.0 / (nz - 1);
             L.push_back(lev);
-            if (nx <= 3 || ny <= 3 || nz <= 3)
+            if (nx <= resolution || ny <= resolution || nz <= resolution)
                 break;
             auto half = [](int n) {
                 return (n - 1) / 2 + 1;
@@ -345,9 +347,9 @@ struct MultiGrid3D {
             KOKKOS_LAMBDA(int i, int j, int k) {
                 const int id = id3(i, j, k, nx, ny);
                 out(id)      = diag * u(id)
-                          - ihx2 * (u(id3(i - 1, j, k, nx, ny)) + u(id3(i + 1, j, k, nx, ny)))
-                          - ihy2 * (u(id3(i, j - 1, k, nx, ny)) + u(id3(i, j + 1, k, nx, ny)))
-                          - ihz2 * (u(id3(i, j, k - 1, nx, ny)) + u(id3(i, j, k + 1, nx, ny)));
+                               - ihx2 * (u(id3(i - 1, j, k, nx, ny)) + u(id3(i + 1, j, k, nx, ny)))
+                               - ihy2 * (u(id3(i, j - 1, k, nx, ny)) + u(id3(i, j + 1, k, nx, ny)))
+                               - ihz2 * (u(id3(i, j, k - 1, nx, ny)) + u(id3(i, j, k + 1, nx, ny)));
             });
     }
 
@@ -377,10 +379,10 @@ struct MultiGrid3D {
             KOKKOS_LAMBDA(int i, int j, int k) {
                 const int id = id3(i, j, k, nx, ny);
                 double Au    = diag * u(id)
-                            - ihx2 * (u(id3(i - 1, j, k, nx, ny)) + u(id3(i + 1, j, k, nx, ny)))
-                            - ihy2 * (u(id3(i, j - 1, k, nx, ny)) + u(id3(i, j + 1, k, nx, ny)))
-                            - ihz2 * (u(id3(i, j, k - 1, nx, ny)) + u(id3(i, j, k + 1, nx, ny)));
-                r(id) = f(id) - Au;
+                               - ihx2 * (u(id3(i - 1, j, k, nx, ny)) + u(id3(i + 1, j, k, nx, ny)))
+                               - ihy2 * (u(id3(i, j - 1, k, nx, ny)) + u(id3(i, j + 1, k, nx, ny)))
+                               - ihz2 * (u(id3(i, j, k - 1, nx, ny)) + u(id3(i, j, k + 1, nx, ny)));
+                r(id)        = f(id) - Au;
             });
     }
 
@@ -656,9 +658,10 @@ void fill_manufactured(const Level3D& lev, DeviceView& f, DeviceView& u_exact) {
 struct Args {
     int nx = 65, ny = 65, nz = 65;
     int nu1 = 2, nu2 = 2;
-    double w   = 0.8;
-    double tol = 1e-8;
-    int maxit  = 200;
+    int resolution = 3;
+    double w       = 0.8;
+    double tol     = 1e-8;
+    int maxit      = 200;
 };
 
 /** \brief Parse command line: -nx -ny -nz -nu1 -nu2 -w -tol -maxit. */
@@ -671,6 +674,8 @@ Args parse_args(int argc, char** argv) {
             a.ny = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "-nz") && i + 1 < argc)
             a.nz = std::atoi(argv[++i]);
+        else if (!std::strcmp(argv[i], "-res") && i + 1 < argc)
+            a.resolution = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "-nu1") && i + 1 < argc)
             a.nu1 = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "-nu2") && i + 1 < argc)
@@ -682,7 +687,8 @@ Args parse_args(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "-maxit") && i + 1 < argc)
             a.maxit = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "-h") || !std::strcmp(argv[i], "--help")) {
-            std::cout << "\nUsage: ./mg3d_kokkos -nx <int> -ny <int> -nz <int> -nu1 <int> -nu2 "
+            std::cout << "\nUsage: ./mg3d_kokkos -nx <int> -ny <int> -nz <int> -res <int> -nu1 "
+                         "<int> -nu2 "
                          "<int> -w <omega> -tol <tol> -maxit <int>\n";
             std::exit(0);
         }
@@ -700,9 +706,14 @@ int main(int argc, char** argv) {
             Kokkos::finalize();
             return 1;
         }
+        if (args.resolution < 3) {
+            std::cerr << "Resolution must be >=3\n";
+            Kokkos::finalize();
+            return 1;
+        }
 
         // Build geometry + allocate matrix-free MG workspace
-        MultiGrid3D mg(args.nx, args.ny, args.nz, args.nu1, args.nu2, args.w);
+        MultiGrid3D mg(args.nx, args.ny, args.nz, args.resolution, args.nu1, args.nu2, args.w);
 
         const Level3D& Alev = mg.L[0];
         const int N         = Alev.N();
@@ -713,7 +724,8 @@ int main(int argc, char** argv) {
         std::cout << "3D Matrix-Free MG-preconditioned CG for -Δu=f on [0,1]^3\n";
         std::cout << "Execution space: " << typeid(Kokkos::DefaultExecutionSpace).name() << "\n";
         std::cout << "Grid: nx=" << Alev.nx << ", ny=" << Alev.ny << ", nz=" << Alev.nz
-                  << ", hx=" << Alev.hx << ", hy=" << Alev.hy << ", hz=" << Alev.hz << "\n";
+                  << " , res=" << args.resolution << ", hx=" << Alev.hx << ", hy=" << Alev.hy
+                  << ", hz=" << Alev.hz << "\n";
         std::cout << "Smoother: weighted Jacobi (ω=" << args.w << ", nu1=" << args.nu1
                   << ", nu2=" << args.nu2 << ")\n";
         std::cout << "Serial coarse-grid threshold: " << SERIAL_THRESHOLD << " points\n";

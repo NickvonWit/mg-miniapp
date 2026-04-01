@@ -175,7 +175,7 @@ struct MultiGrid3D {
             for (int j = 1; j < ny - 1; ++j)
                 for (int i = 1; i < nx - 1; ++i) {
                     const int id = id3(i, j, k, nx, ny);
-                    out[id]      = diag * u[id]
+                    out[id] = diag * u[id]
                               - ihx2 * (u[id3(i - 1, j, k, nx, ny)] + u[id3(i + 1, j, k, nx, ny)])
                               - ihy2 * (u[id3(i, j - 1, k, nx, ny)] + u[id3(i, j + 1, k, nx, ny)])
                               - ihz2 * (u[id3(i, j, k - 1, nx, ny)] + u[id3(i, j, k + 1, nx, ny)]);

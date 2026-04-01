@@ -26,5 +26,5 @@ target_link_libraries(mg3d_ippl ippl Kokkos::kokkos)
 # add_executable(mg3d_kokkos mg3d_kokkos.cpp)
 # target_link_libraries(mg3d_kokkos Kokkos::kokkos ippl)
 
-# add_executable(mg3d_kokkos_ai mg3d_kokkos_AI.cpp)
-# target_link_libraries(mg3d_kokkos_ai Kokkos::kokkos)
+add_executable(mg3d_kokkos_ai mg3d_kokkos_AI.cpp)
+target_link_libraries(mg3d_kokkos_ai Kokkos::kokkos)
