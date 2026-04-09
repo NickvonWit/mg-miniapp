@@ -180,9 +180,9 @@ struct MultiGrid3D {
             KOKKOS_LAMBDA(int i, int j, int k) {
                 const int id = id3(i, j, k, nx, ny);
                 out(id)      = diag * u(id)
-                          - ihx2 * (u(id3(i - 1, j, k, nx, ny)) + u(id3(i + 1, j, k, nx, ny)))
-                          - ihy2 * (u(id3(i, j - 1, k, nx, ny)) + u(id3(i, j + 1, k, nx, ny)))
-                          - ihz2 * (u(id3(i, j, k - 1, nx, ny)) + u(id3(i, j, k + 1, nx, ny)));
+                               - ihx2 * (u(id3(i - 1, j, k, nx, ny)) + u(id3(i + 1, j, k, nx, ny)))
+                               - ihy2 * (u(id3(i, j - 1, k, nx, ny)) + u(id3(i, j + 1, k, nx, ny)))
+                               - ihz2 * (u(id3(i, j, k - 1, nx, ny)) + u(id3(i, j, k + 1, nx, ny)));
             });
     }
 
@@ -276,7 +276,7 @@ struct MultiGrid3D {
         const int nxf = fine.nx, nyf = fine.ny;
         Kokkos::parallel_for(
             "prolong",
-            Kokkos::MDRangePolicy<Kokkos::Rank<3>>({1, 1, 1}, {nxc - 1, nyc - 1, nzc - 1}),
+            Kokkos::MDRangePolicy<Kokkos::Rank<3>>({0, 0, 0}, {nxc - 1, nyc - 1, nzc - 1}),
             KOKKOS_LAMBDA(int I, int J, int K) {
                 const double c000 = u_c(id3(I, J, K, nxc, nyc));
                 const double c100 = u_c(id3(I + 1, J, K, nxc, nyc));
